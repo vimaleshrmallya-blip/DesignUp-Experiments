@@ -505,6 +505,25 @@ const Icon = {
   people: <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round"><circle cx="9" cy="9" r="3.2" /><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" /><circle cx="17" cy="10" r="2.5" /><path d="M16.5 14.5c2.4 0 4 1.3 4.5 3.8" /></svg>,
 };
 
+/* ---------------- music widget (optional): set `music` in config.js ---------------- */
+const MUSIC = (typeof window !== "undefined" && window.DU_CONFIG && window.DU_CONFIG.music) || null;
+// accepts a Spotify / SoundCloud / YouTube link or a pasted <iframe> snippet; returns { src, h } or null
+const toEmbed = (raw) => {
+  let t = String(raw || "").trim(); if (!t) return null;
+  const fm = t.match(/<iframe[^>]*\ssrc=["']([^"']+)["']/i); if (fm) t = fm[1];
+  let m;
+  if ((m = t.match(/open\.spotify\.com\/(?:embed\/)?(track|playlist|album|episode|show)\/([\w]+)/i))) return { src: "https://open.spotify.com/embed/" + m[1] + "/" + m[2], h: m[1] === "track" || m[1] === "episode" ? 152 : 352 };
+  if (/soundcloud\.com/i.test(t) && !/w\.soundcloud\.com\/player/i.test(t)) return { src: "https://w.soundcloud.com/player/?url=" + encodeURIComponent(t) + "&auto_play=false&hide_related=true&show_comments=false&visual=false", h: 166 };
+  if (/w\.soundcloud\.com\/player/i.test(t)) return { src: t, h: 166 };
+  if ((m = t.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/)|youtu\.be\/)([\w-]{11})/i))) {
+    const tm = t.match(/[?&](?:t|start)=(?:(\d+)h)?(?:(\d+)m)?(\d+)?s?(?=&|$)/i), st = tm ? (+tm[1] || 0) * 3600 + (+tm[2] || 0) * 60 + (+tm[3] || 0) : 0;
+    return { src: "https://www.youtube.com/embed/" + m[1] + "?rel=0" + (st ? "&start=" + st : ""), h: 190 };
+  }
+  if ((m = t.match(/youtube\.com\/playlist\?(?:.*&)?list=([\w-]+)/i))) return { src: "https://www.youtube.com/embed/videoseries?list=" + m[1], h: 190 };
+  return /^https:\/\/[^\s]+$/.test(t) && /embed|player/i.test(t) ? { src: t, h: 200 } : null;
+};
+const MUSIC_EMBED = MUSIC ? toEmbed(MUSIC.url || MUSIC.embed) : null;
+
 /* ---------------- component ---------------- */
 
 // shrink a pasted/chosen image to a small JPEG data URL for the thumbnail
@@ -595,7 +614,7 @@ export default function IslandMap() {
   const [all, setAll] = useState({ photos: [], notes: [] });
   const [user, setUser] = useState(null), [admin, setAdmin] = useState(false);
   const [si, setSi] = useState(false), [siEmail, setSiEmail] = useState(""), [siMsg, setSiMsg] = useState("");
-  const [mod, setMod] = useState(false);
+  const [mod, setMod] = useState(false), [mus, setMus] = useState(false), [musLoaded, setMusLoaded] = useState(false);
   const afterRef = useRef(null);
   const refresh = useCallback(async () => { const d = await store.load(); setAll({ photos: d.photos, notes: d.notes }); }, []);
   const refreshUser = useCallback(async () => { const u = await store.auth.user(); setUser(u); setAdmin(u ? await store.auth.isAdmin() : false); if (u && afterRef.current) { const f = afterRef.current; afterRef.current = null; setSi(false); f(); } }, []);
@@ -802,6 +821,7 @@ export default function IslandMap() {
           <div className="float tools" onPointerDown={stop}>
             <button type="button" className="plus" style={{ color: "var(--mag)" }} onClick={() => { setWp(!wp); setWpErr(""); }} aria-label="Add photos" title="Add photos"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg></button>
             <button type="button" className="b acct" onClick={() => { if (!store.REMOTE) return say("Private demo mode: everything stays in this browser."); if (user) { if (window.confirm("Sign out" + (user.name ? " " + user.name : "") + "?")) store.auth.signOut(); } else { afterRef.current = null; setSiMsg(""); setSi(true); } }} aria-label={user ? "Account" : "Sign in"} title={user ? (user.name || user.email || "Signed in") : "Sign in"}>{user ? (user.name || user.email || "?").slice(0, 1).toUpperCase() : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c1-4 4-6 8-6s7 2 8 6" /></svg>}</button>
+            {MUSIC_EMBED && <button type="button" className={"b acct" + (mus ? " on" : "")} onClick={() => { setMus(!mus); setMusLoaded(true); }} aria-label="Music" aria-pressed={mus} title={MUSIC.title || "Music"}>♪</button>}
             {admin && <button type="button" className="b acct mod" onClick={() => setMod(!mod)} aria-label="Moderate" title="Moderate">⚑{(() => { const n = all.photos.concat(all.notes).filter((x) => x.status === "pending" || x.status === "hidden").length; return n ? <i>{n}</i> : null; })()}</button>}
             <div className="b d">{Icon.cal}</div><div className="b d">{Icon.people}</div>
           </div>
@@ -880,6 +900,13 @@ export default function IslandMap() {
                 {store.REMOTE && !mineOf(p) && <button type="button" className="pb" onClick={() => flag("photo", p)}>⚑ Report</button>}
                 {(!store.REMOTE || mineOf(p) || admin) && <button type="button" className="pb dng" onClick={async () => { if (await delItem("photo", p)) setLb(null); }}>Delete</button>}</div>
             </div>); })()}
+          {MUSIC_EMBED && musLoaded && (
+            <div className="float musp" style={{ display: mus ? "block" : "none" }} onPointerDown={stop}>
+              <button type="button" className="close2" onClick={() => setMus(false)} aria-label="Hide music player">×</button>
+              <h4 className="mono">♪ {(MUSIC.title || "Music").toUpperCase()}</h4>
+              <iframe title={MUSIC.title || "Music player"} src={MUSIC_EMBED.src} width="100%" height={MUSIC_EMBED.h} allow="autoplay; encrypted-media; clipboard-write; picture-in-picture" loading="lazy" style={{ border: 0, borderRadius: 12 }} />
+              <p className="musn">Closing the panel keeps the music playing. Press ♪ again to bring it back.</p>
+            </div>)}
           {si && (
             <div className="float pm ap sgn" onPointerDown={stop}>
               <button type="button" className="close2" onClick={() => { setSi(false); afterRef.current = null; }} aria-label="Close">×</button>
@@ -1185,6 +1212,7 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@4
 .pmnote{color:var(--mute);font-size:11px;margin:10px 0 0;line-height:1.4}
 .isl.dk .pm input,.isl.dk .pm select,.isl.dk .pm textarea{background:#111;color:var(--ink)}
 @media (max-width:700px){.pm{left:10px!important;right:10px;top:auto;bottom:10px;width:auto;max-height:70%}}
+.musp{left:14px;bottom:150px;width:min(340px,calc(100% - 28px));padding:12px 12px 8px;z-index:5}.musp h4{margin:0 0 8px;font:500 9.5px var(--mono);color:var(--mute);letter-spacing:.08em;padding-right:26px}.musp .close2{position:absolute;right:10px;top:8px;width:24px;height:24px;border-radius:50%;background:var(--chip);display:grid;place-items:center}.musp .musn{font-size:10.5px;color:var(--mute);margin:6px 0 0}.b.acct.on{color:var(--mag)}
 .sgn{width:340px}.sgn .wl{margin:0 0 8px;font:800 17px/1.25 var(--sans)}.sgn .pb.li,.sgn .pb.gg{width:100%;padding:10px;margin-top:6px}.sgn .pb.li{background:#0a66c2;color:#fff}.sgn .pb.gg{background:#fff;color:#1f1f1f;border:1px solid #dadce0}.sgn .or{font-size:11px;color:var(--mute);margin:12px 0 6px;text-align:center}.sgn .nrow input{flex:1;min-width:0;font:13px var(--sans);padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--chip);color:var(--ink)}
 .acct{position:relative;font:800 13px var(--sans);display:grid;place-items:center}.acct.mod i{position:absolute;right:-2px;top:-2px;background:var(--mag);color:#fff;font:700 9px var(--sans);font-style:normal;border-radius:99px;min-width:15px;height:15px;display:grid;place-items:center}
 .modp{width:380px;max-height:78%;overflow:auto}.mi{padding:10px 0;border-top:1px solid var(--line)}.mi img{width:100%;max-height:200px;object-fit:cover;border-radius:8px;cursor:pointer}.mi .mt{font-size:13px;line-height:1.4;white-space:pre-wrap;padding:8px 10px;background:var(--chip);border-radius:8px}.mi .mm{font-size:11px;color:var(--mute);margin:6px 0}.mi .mm p{margin:2px 0 0;color:var(--ink)}

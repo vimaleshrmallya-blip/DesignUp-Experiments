@@ -10,3 +10,6 @@ All files sit in one flat folder (no sub-folders), so they upload to GitHub in o
 Vercel: import the repo and Deploy with default settings. Local: `npm install`, then `npm run dev` or `npm run build`.
 
 Sharing and moderation: create a free Supabase project, run `schema.sql` (check the moderator email on its last line), enable Authentication → Providers → Google, set Site URL to your Vercel address, then paste the Project URL and `anon` key into `config.js` and commit. Never commit the `service_role` key.
+
+## Music player
+In `config.js`, replace `PASTE_YOUR_…_LINK` with a SoundCloud, Spotify or YouTube link (or paste the whole `<iframe …>` embed code). A ♪ button appears top-left and opens the player. Closing the panel keeps the music playing. Delete the `music:` line to remove the button. Nobody hears anything until they press play, because browsers block autoplay.
