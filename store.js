@@ -77,3 +77,6 @@ export async function setStatus(kind, id, status) {
   const r = await sb.from(kind === "photo" ? "photos" : "notes").update({ status }).eq("id", id);
   return r.error ? { error: r.error.message } : {};
 }
+
+// demo mode only: forget every photo saved in this browser
+export function clearLocalPhotos() { if (REMOTE) return false; try { localStorage.removeItem("du-photos-v1"); return true; } catch (e) { return false; } }
